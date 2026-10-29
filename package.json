@@ -8,11 +8,13 @@
     "start:go": "expo start --go",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "postinstall": "node scripts/patch-llama-rn-bridge.mjs",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
+    "@shopify/react-native-skia": "2.14.0",
     "expo": "~58.0.11",
     "expo-dev-client": "~58.0.17",
     "expo-file-system": "~58.0.11",
@@ -26,8 +28,9 @@
     "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
-    "react-native-worklets": "0.13.0",
-    "react-native-web": "~0.21.0"
+    "react-native-svg": "15.16.0",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.13.0"
   },
   "devDependencies": {
     "@types/node": "~24.7.2",
