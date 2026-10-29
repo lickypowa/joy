@@ -1,0 +1,64 @@
+stages:
+  - validate
+  - ios
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+  EXPO_NO_TELEMETRY: "1"
+  CI: "1"
+
+cache:
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - .npm/
+
+validate:
+  stage: validate
+  image: node:24-bookworm
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - npm run typecheck
+    - npm test
+    - npx expo config --type public
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+# GitLab does not provide a macOS shared runner. Register a self-managed macOS
+# runner with the `macos-xcode` tag and Xcode/CocoaPods installed to run this job.
+# The output IPA is unsigned (same signing-free route used for the workout app)
+# and is suitable as a build artifact, not direct App Store/device installation.
+ios_unsigned_ipa:
+  stage: ios
+  tags:
+    - macos-xcode
+  when: manual
+  script:
+    - node --version
+    - node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major < 24 || (major === 24 && minor < 3)) throw new Error('Expo SDK 58 requires Node.js 24.3+ on this runner')"
+    - npm ci
+    - npx expo prebuild --platform ios --no-install --clean
+    - cd ios && pod install && cd ..
+    - WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+    - test -n "$WORKSPACE"
+    - SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
+    - xcodebuild -workspace "$WORKSPACE" -list
+    - mkdir -p build
+    - xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphoneos -archivePath "$CI_PROJECT_DIR/build/JOY.xcarchive" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive
+    - APP_PATH="$(find build/JOY.xcarchive/Products/Applications -maxdepth 1 -name '*.app' -type d -print -quit)"
+    - test -n "$APP_PATH"
+    - mkdir -p build/Payload
+    - cp -R "$APP_PATH" build/Payload/
+    - cd build && zip -qr JOY-unsigned.ipa Payload
+  artifacts:
+    name: "JOY-unsigned-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - build/JOY-unsigned.ipa
+    expire_in: 14 days
+    when: on_success
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+

@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "JOY",
+    "slug": "joy-assistant",
+    "scheme": "joy",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.joy.assistant",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "JOY usa il microfono quando scegli di parlarle.",
+        "NSSpeechRecognitionUsageDescription": "JOY trascrive la tua voce per comprendere la richiesta.",
+        "NSRemindersFullAccessUsageDescription": "JOY aggiunge ai tuoi Promemoria gli elementi che le chiedi di ricordare.",
+        "NSRemindersUsageDescription": "JOY aggiunge ai tuoi Promemoria gli elementi che le chiedi di ricordare.",
+        "NSContactsUsageDescription": "JOY cerca un contatto solo quando le chiedi di trovare una persona o un numero."
+      }
+    },
+    "android": { "package": "app.joy.assistant" }
+  }
+}
