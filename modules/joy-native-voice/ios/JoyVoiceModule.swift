@@ -5,9 +5,25 @@ import Contacts
 import ExpoModulesCore
 import Speech
 
+private final class JoySpeechSynthesizerDelegate: NSObject, AVSpeechSynthesizerDelegate {
+  private let onFinished: () -> Void
+
+  init(onFinished: @escaping () -> Void) {
+    self.onFinished = onFinished
+    super.init()
+  }
+
+  func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    onFinished()
+  }
+}
+
 public class JoyVoiceModule: Module {
   private let engine = AVAudioEngine()
   private let synthesizer = AVSpeechSynthesizer()
+  private lazy var speechSynthesizerDelegate = JoySpeechSynthesizerDelegate { [weak self] in
+    self?.sendEvent("onSpeechFinished", [:])
+  }
   private let eventStore = EKEventStore()
   private var request: SFSpeechAudioBufferRecognitionRequest?
   private var task: SFSpeechRecognitionTask?
@@ -98,7 +114,7 @@ public class JoyVoiceModule: Module {
       let utterance = AVSpeechUtterance(string: text)
       utterance.voice = AVSpeechSynthesisVoice(language: localeIdentifier)
       utterance.rate = Float(min(max(rate, 0.35), 0.6))
-      self.synthesizer.delegate = self
+      self.synthesizer.delegate = self.speechSynthesizerDelegate
       self.synthesizer.speak(utterance)
     }
 
@@ -189,11 +205,5 @@ public class JoyVoiceModule: Module {
     case .notDetermined: return "undetermined"
     @unknown default: return "unknown"
     }
-  }
-}
-
-extension JoyVoiceModule: AVSpeechSynthesizerDelegate {
-  public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-    sendEvent("onSpeechFinished", [:])
   }
 }

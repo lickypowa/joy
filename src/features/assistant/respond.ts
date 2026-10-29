@@ -1,6 +1,7 @@
 import { OfflineProvider } from '@/core/ai/OfflineProvider';
 import type { Turn } from '@/core/ai/LLMProvider';
 import { localLlamaProvider } from '@/core/ai/LocalLlamaProvider';
+import { installedModelPath } from '@/features/models/modelManager';
 import { getTomorrowWeather, getWeather } from '@/features/weather/weather';
 import { listMemories } from '@/features/conversation/repository';
 import { voice } from '@/features/voice/voice';
@@ -28,6 +29,14 @@ export async function respond(turns: Turn[], onToken?:(token:string)=>void): Pro
       if(intent.tomorrow)return `Domani a ${report.place}: ${description}, tra ${Math.round(report.minTemperature!)}°C e ${Math.round(report.maxTemperature!)}°C.${report.rainChance==null?'':` Probabilità massima di pioggia: ${report.rainChance}%.`}`;
       return `A ${report.place} adesso ci sono ${Math.round(report.temperature)}°C e ${description}.${report.rainChance==null?'':` Probabilità massima di pioggia oggi: ${report.rainChance}%.`}`;
     }catch{return 'Non riesco a raggiungere il servizio meteo in questo momento. Le altre funzioni locali restano disponibili.';}
+  }
+  // Load a previously installed GGUF on demand, even if the user has not
+  // opened Settings since launching the app.
+  if(!await localLlamaProvider.isAvailable()){
+    try{
+      const modelPath=await installedModelPath();
+      if(modelPath)await localLlamaProvider.load(modelPath);
+    }catch{/* Keep the usable offline intent fallback if local loading fails. */}
   }
   if(await localLlamaProvider.isAvailable()){
     try{

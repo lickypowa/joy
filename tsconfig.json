@@ -6,7 +6,10 @@
     "types": ["node", "react"],
     "paths": {
       "@/*": ["./src/*"],
-      "src/*": ["./src/*"]
+      "src/*": ["./src/*"],
+      "@joy-core/*": ["./joy-core/src/*"]
     }
-  }
+  },
+  "include": ["app/**/*", "src/**/*", "modules/**/*"],
+  "exclude": ["joy-core", "node_modules", "dist"]
 }
