@@ -1,4 +1,4 @@
-name: iOS IPA
+name: iOS unsigned IPA
 
 on:
   workflow_dispatch:
@@ -8,11 +8,9 @@ permissions:
 
 jobs:
   build-ios-ipa:
-    name: Build signed iOS IPA
-    runs-on: ubuntu-latest
+    name: Build unsigned iOS IPA
+    runs-on: macos-latest
     timeout-minutes: 120
-    env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -24,29 +22,43 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Install dependencies
+      - name: Install JavaScript dependencies
         run: npm ci
 
-      - name: Check Expo token
-        run: test -n "$EXPO_TOKEN" || (echo "Add EXPO_TOKEN in GitHub repository secrets" && exit 1)
+      - name: Generate iOS project
+        run: npx expo prebuild --platform ios --no-install --clean
 
-      - name: Build on Expo's macOS cloud
+      - name: Install CocoaPods
+        run: cd ios && pod install
+
+      - name: Archive and package unsigned IPA
+        shell: bash
         run: |
-          mkdir -p build
-          npx --yes eas-cli@latest build --platform ios --profile development --non-interactive --json --wait > build/eas-build.json
+          set -euo pipefail
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          test -n "$WORKSPACE"
+          SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
+          ARCHIVE_PATH="$RUNNER_TEMP/JOY.xcarchive"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$ARCHIVE_PATH" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            archive
 
-      - name: Download the IPA from this build
-        run: |
-          BUILD_ID="$(node -e 'const r=JSON.parse(require("fs").readFileSync("build/eas-build.json", "utf8")); const b=Array.isArray(r)?r[0]:r; if (!b?.id) process.exit(1); process.stdout.write(b.id)')"
-          npx --yes eas-cli@latest build:download --build-id "$BUILD_ID" --non-interactive --json
-          IPA_PATH="$(find . -maxdepth 2 -type f -name '*.ipa' -not -path './node_modules/*' -not -path './build/*' -print -quit)"
-          test -n "$IPA_PATH" || (echo "EAS completed, but no IPA was downloaded" && exit 1)
-          mv "$IPA_PATH" "build/JOY-${GITHUB_SHA::7}.ipa"
+          APP_PATH="$(find "$ARCHIVE_PATH/Products/Applications" -maxdepth 1 -name '*.app' -type d -print -quit)"
+          test -n "$APP_PATH"
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+          (cd build && zip -qr "JOY-unsigned-${GITHUB_SHA::7}.ipa" Payload)
 
-      - name: Publish IPA artifact
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: JOY-iOS-IPA
-          path: build/JOY-*.ipa
+          name: JOY-unsigned-IPA
+          path: build/JOY-unsigned-*.ipa
           if-no-files-found: error
           retention-days: 14
