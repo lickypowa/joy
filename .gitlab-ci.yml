@@ -26,36 +26,27 @@ validate:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH'
 
-# GitLab does not provide a macOS shared runner. Register a self-managed macOS
-# runner with the `macos-xcode` tag and Xcode/CocoaPods installed to run this job.
-# The output IPA is unsigned (same signing-free route used for the workout app)
-# and is suitable as a build artifact, not direct App Store/device installation.
-ios_unsigned_ipa:
+# EAS builds iOS on Expo's hosted macOS workers, so this job runs on Linux and
+# does not require a Mac runner. Configure EXPO_TOKEN in GitLab CI/CD variables
+# and initialize EAS credentials once (see eas.json / project setup).
+ios_development_build:
   stage: ios
-  tags:
-    - macos-xcode
   when: manual
+  image: node:24-bookworm
   script:
-    - node --version
-    - node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major < 24 || (major === 24 && minor < 3)) throw new Error('Expo SDK 58 requires Node.js 24.3+ on this runner')"
     - npm ci
-    - npx expo prebuild --platform ios --no-install --clean
-    - cd ios && pod install && cd ..
-    - WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
-    - test -n "$WORKSPACE"
-    - SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
-    - xcodebuild -workspace "$WORKSPACE" -list
+    - test -n "$EXPO_TOKEN" || (echo "Set EXPO_TOKEN in GitLab CI/CD variables" && exit 1)
     - mkdir -p build
-    - xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphoneos -archivePath "$CI_PROJECT_DIR/build/JOY.xcarchive" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive
-    - APP_PATH="$(find build/JOY.xcarchive/Products/Applications -maxdepth 1 -name '*.app' -type d -print -quit)"
-    - test -n "$APP_PATH"
-    - mkdir -p build/Payload
-    - cp -R "$APP_PATH" build/Payload/
-    - cd build && zip -qr JOY-unsigned.ipa Payload
+    - npx --yes eas-cli build --platform ios --profile development --non-interactive --json --wait > build/eas-build.json
+    - BUILD_ID="$(node -e 'const r=JSON.parse(require("fs").readFileSync("build/eas-build.json", "utf8")); const b=Array.isArray(r)?r[0]:r; if (!b?.id) process.exit(1); process.stdout.write(b.id)')"
+    - npx --yes eas-cli build:download --build-id "$BUILD_ID" --non-interactive --json
+    - IPA_PATH="$(find . -maxdepth 2 -type f -name '*.ipa' -not -path './node_modules/*' -not -path './build/*' -print -quit)"
+    - test -n "$IPA_PATH" || (echo "EAS completed, but no IPA was downloaded" && exit 1)
+    - mv "$IPA_PATH" "build/JOY-$CI_COMMIT_SHORT_SHA.ipa"
   artifacts:
-    name: "JOY-unsigned-$CI_COMMIT_SHORT_SHA"
+    name: "JOY-$CI_COMMIT_SHORT_SHA"
     paths:
-      - build/JOY-unsigned.ipa
+      - build/JOY-*.ipa
     expire_in: 14 days
     when: on_success
   rules:

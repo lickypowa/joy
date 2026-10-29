@@ -1,0 +1,52 @@
+name: iOS IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios-ipa:
+    name: Build signed iOS IPA
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check Expo token
+        run: test -n "$EXPO_TOKEN" || (echo "Add EXPO_TOKEN in GitHub repository secrets" && exit 1)
+
+      - name: Build on Expo's macOS cloud
+        run: |
+          mkdir -p build
+          npx --yes eas-cli@latest build --platform ios --profile development --non-interactive --json --wait > build/eas-build.json
+
+      - name: Download the IPA from this build
+        run: |
+          BUILD_ID="$(node -e 'const r=JSON.parse(require("fs").readFileSync("build/eas-build.json", "utf8")); const b=Array.isArray(r)?r[0]:r; if (!b?.id) process.exit(1); process.stdout.write(b.id)')"
+          npx --yes eas-cli@latest build:download --build-id "$BUILD_ID" --non-interactive --json
+          IPA_PATH="$(find . -maxdepth 2 -type f -name '*.ipa' -not -path './node_modules/*' -not -path './build/*' -print -quit)"
+          test -n "$IPA_PATH" || (echo "EAS completed, but no IPA was downloaded" && exit 1)
+          mv "$IPA_PATH" "build/JOY-${GITHUB_SHA::7}.ipa"
+
+      - name: Publish IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JOY-iOS-IPA
+          path: build/JOY-*.ipa
+          if-no-files-found: error
+          retention-days: 14
